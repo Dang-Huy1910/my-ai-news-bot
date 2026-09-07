@@ -159,9 +159,9 @@ def get_github_trending_repos():
 
 
 def get_hacker_news_posts():
-    """Lấy các bài thảo luận nổi bật từ Hacker News về DeepSeek, Cursor, Antigravity"""
+    """Lấy các bài thảo luận nổi bật từ Grok, Claude, Codex, DeepSeek, Cursor, Antigravity"""
     posts = []
-    keywords = ["DeepSeek", "Cursor", "Antigravity"]
+    keywords = ["Grok", "Claude", "Codex", "DeepSeek", "Cursor AI", "Antigravity"]
     headers = {"User-Agent": "DailyAINewsBot/1.0"}
 
     for kw in keywords:
@@ -190,9 +190,9 @@ def get_hacker_news_posts():
 
 
 def get_reddit_posts():
-    """Lấy các bài thảo luận nổi bật từ Reddit về DeepSeek, Cursor, Antigravity"""
+    """Lấy các bài thảo luận nổi bật từ Reddit về Grok, Claude, Codex, DeepSeek, Cursor, Antigravity"""
     posts = []
-    keywords = ["DeepSeek", "Cursor AI", "Antigravity"]
+    keywords = ["Grok", "Claude", "Codex", "DeepSeek", "Cursor AI", "Antigravity"]
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 DailyAIBot/1.0"}
 
     for kw in keywords:
