@@ -30,9 +30,21 @@ if os.path.exists(ENV_FILE):
                 elif key == "GEMINI_API_KEY" and not GEMINI_API_KEY:
                     GEMINI_API_KEY = val
 
-REPO_OWNER = "steven2358"
-REPO_NAME = "awesome-generative-ai"
-STATE_FILE = os.path.join(os.path.dirname(__file__), "last_commit.txt")
+# Danh sách các repo Awesome cần theo dõi cập nhật (AI Tools & MCP Servers)
+TRACKED_REPOS = [
+    {
+        "owner": "steven2358",
+        "repo": "awesome-generative-ai",
+        "label": "Awesome Generative AI",
+        "state_file": os.path.join(os.path.dirname(__file__), "last_commit.txt"),
+    },
+    {
+        "owner": "punkpeye",
+        "repo": "awesome-mcp-servers",
+        "label": "Awesome MCP Servers",
+        "state_file": os.path.join(os.path.dirname(__file__), "last_commit_mcp.txt"),
+    }
+]
 LESSON_STATE_FILE = os.path.join(os.path.dirname(__file__), "lesson_day.txt")
 
 # ========================================================
@@ -161,7 +173,7 @@ def get_github_trending_repos():
 def get_hacker_news_posts():
     """Lấy các bài thảo luận nổi bật từ Grok, Claude, Codex, DeepSeek, Cursor, Antigravity"""
     posts = []
-    keywords = ["Grok", "Claude", "Codex", "DeepSeek", "Cursor AI", "Antigravity"]
+    keywords = ["Grok", "Claude", "Codex", "DeepSeek", "Cursor AI", "Antigravity", "MCP", "Model Context Protocol"]
     headers = {"User-Agent": "DailyAINewsBot/1.0"}
 
     for kw in keywords:
@@ -190,9 +202,9 @@ def get_hacker_news_posts():
 
 
 def get_reddit_posts():
-    """Lấy các bài thảo luận nổi bật từ Reddit về Grok, Claude, Codex, DeepSeek, Cursor, Antigravity"""
+    """Lấy các bài thảo luận nổi bật từ Reddit về Grok, Claude, Codex, DeepSeek, Cursor, Antigravity, MCP"""
     posts = []
-    keywords = ["Grok", "Claude", "Codex", "DeepSeek", "Cursor AI", "Antigravity"]
+    keywords = ["Grok", "Claude", "Codex", "DeepSeek", "Cursor AI", "Antigravity", "Model Context Protocol"]
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 DailyAIBot/1.0"}
 
     for kw in keywords:
@@ -260,8 +272,8 @@ Gợi ý nội dung: {lesson_info['desc']}
 --- DỮ LIỆU TOP 5 GITHUB TRENDING HÔM NAY ---
 {trending_text}
 
---- DỮ LIỆU CÔNG CỤ & MODEL MỚI (GITHUB AWESOME AI) ---
-{awesome_diff if awesome_diff.strip() else "Hôm nay chưa có cập nhật công cụ mới trên Awesome AI."}
+--- DỮ LIỆU CÔNG CỤ & MODEL MỚI (GITHUB AWESOME AI & AWESOME MCP SERVERS) ---
+{awesome_diff if awesome_diff.strip() else "Hôm nay chưa có cập nhật công cụ mới trên Awesome AI hoặc Awesome MCP."}
 
 --- DỮ LIỆU THẢO LUẬN CỘNG ĐỒNG (REDDIT & HACKER NEWS) ---
 {discussions_text}
@@ -286,7 +298,7 @@ Gợi ý nội dung: {lesson_info['desc']}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-� <b>2. TOP 5 GITHUB REPO TRENDING (AI & ML)</b>
+ <b>2. TOP 5 GITHUB REPO TRENDING (AI & ML)</b>
 [Liệt kê đủ 5 repo trending theo mẫu sau:]
 1️⃣ <a href="[url_repo]"><b>[Tên repo]</b></a> (⭐ [Số sao])
 <i>[Mô tả 1 câu về công dụng của repo này]</i>
@@ -297,8 +309,8 @@ Gợi ý nội dung: {lesson_info['desc']}
 
 ━━━━━━━━━━━━━━━━━━━━
 
-🛠️ <b>3. CÔNG CỤ & ỨNG DỤNG MỚI</b>
-[Nêu 1-2 công cụ mới từ Awesome AI kèm link in đậm, mô tả ngắn gọn 1 câu]
+🛠️ <b>3. CÔNG CỤ & MCP SERVER MỚI NỔI BẬT</b>
+[Nêu 1-2 công cụ hoặc MCP server mới từ Awesome AI / Awesome MCP Server kèm link in đậm, mô tả ngắn gọn 1 câu]
 
 ━━━━━━━━━━━━━━━━━━━━
 
@@ -337,9 +349,9 @@ Gợi ý nội dung: {lesson_info['desc']}
         return f"⚠️ Lỗi khi gọi Gemini: {e}"
 
 
-def get_latest_commit():
+def get_latest_commit(owner: str, repo: str):
     """Lấy commit mới nhất của file README.md từ GitHub API"""
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/commits?path=README.md&per_page=1"
+    url = f"https://api.github.com/repos/{owner}/{repo}/commits?path=README.md&per_page=1"
     headers = {"User-Agent": "Daily-AI-Digest-Bot"}
     try:
         res = requests.get(url, headers=headers, timeout=15)
@@ -348,13 +360,13 @@ def get_latest_commit():
             if commits:
                 return commits[0]["sha"], commits[0]["commit"]["message"]
     except Exception as e:
-        print(f"⚠️ Lỗi kết nối GitHub API: {e}")
+        print(f"⚠️ Lỗi kết nối GitHub API ({owner}/{repo}): {e}")
     return None, None
 
 
-def get_commit_diff(old_sha: str, new_sha: str):
+def get_commit_diff(owner: str, repo: str, old_sha: str, new_sha: str):
     """Lấy các dòng thay đổi giữa 2 commit"""
-    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/compare/{old_sha}...{new_sha}"
+    url = f"https://api.github.com/repos/{owner}/{repo}/compare/{old_sha}...{new_sha}"
     headers = {"User-Agent": "Daily-AI-Digest-Bot"}
     try:
         res = requests.get(url, headers=headers, timeout=15)
@@ -366,15 +378,80 @@ def get_commit_diff(old_sha: str, new_sha: str):
                     patch = file.get("patch", "")
                     for line in patch.split("\n"):
                         if line.startswith("+") and not line.startswith("+++"):
-                            added_lines.append(line[1:].strip())
+                            content = line[1:].strip()
+                            if content and content.startswith("-"):
+                                added_lines.append(content)
             return "\n".join(added_lines)
     except Exception as e:
-        print(f"⚠️ Lỗi lấy commit diff: {e}")
+        print(f"⚠️ Lỗi lấy commit diff ({owner}/{repo}): {e}")
     return ""
 
 
+def get_recent_additions(owner: str, repo: str, commit_sha: str, limit: int = 5):
+    """Lấy các mục mới được thêm vào từ commit mới nhất (dùng khi mới khởi tạo hoặc cần xem cập nhật gần nhất)"""
+    url = f"https://api.github.com/repos/{owner}/{repo}/commits/{commit_sha}"
+    headers = {"User-Agent": "Daily-AI-Digest-Bot"}
+    try:
+        res = requests.get(url, headers=headers, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            added_lines = []
+            for file in data.get("files", []):
+                if file.get("filename") == "README.md":
+                    patch = file.get("patch", "")
+                    for line in patch.split("\n"):
+                        if line.startswith("+") and not line.startswith("+++"):
+                            content = line[1:].strip()
+                            if content and content.startswith("-"):
+                                added_lines.append(content)
+            return "\n".join(added_lines[:limit])
+    except Exception as e:
+        print(f"⚠️ Lỗi lấy commit gần nhất ({owner}/{repo}): {e}")
+    return ""
+
+
+def get_all_tracked_updates():
+    """Quét cập nhật mới từ các repo Awesome AI và Awesome MCP Servers"""
+    all_diffs = []
+    updates_to_save = []
+
+    for item in TRACKED_REPOS:
+        owner = item["owner"]
+        repo = item["repo"]
+        label = item["label"]
+        state_file = item["state_file"]
+
+        latest_sha, commit_msg = get_latest_commit(owner, repo)
+        last_saved_sha = None
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, "r", encoding="utf-8") as f:
+                    last_saved_sha = f.read().strip()
+            except Exception:
+                last_saved_sha = None
+
+        repo_diff = ""
+        if latest_sha and last_saved_sha and latest_sha != last_saved_sha:
+            first_line = commit_msg.split("\n")[0] if commit_msg else ""
+            print(f"⚡ Phát hiện commit mới trên {label} ({last_saved_sha[:7]} -> {latest_sha[:7]}): {first_line}")
+            repo_diff = get_commit_diff(owner, repo, last_saved_sha, latest_sha)
+            updates_to_save.append((state_file, latest_sha))
+        elif latest_sha and not last_saved_sha:
+            print(f"📌 Lần đầu quét {label}, lấy các mục mới nhất từ commit {latest_sha[:7]}...")
+            repo_diff = get_recent_additions(owner, repo, latest_sha, limit=5)
+            updates_to_save.append((state_file, latest_sha))
+        elif latest_sha:
+            updates_to_save.append((state_file, latest_sha))
+
+        if repo_diff.strip():
+            all_diffs.append(f"📦 <b>{label}:</b>\n{repo_diff}")
+
+    combined_diff = "\n\n".join(all_diffs)
+    return combined_diff, updates_to_save
+
+
 def main():
-    print("🚀 Bắt đầu quét dữ liệu: Kiến thức AI + Top 5 Trending Git + Công cụ + Diễn đàn...")
+    print("🚀 Bắt đầu quét dữ liệu: Kiến thức AI + Top 5 Trending Git + Công cụ AI/MCP + Diễn đàn...")
 
     # 1. Lấy bài học hôm nay
     day_idx, lesson_info = get_current_lesson()
@@ -382,7 +459,7 @@ def main():
 
     # Chế độ kiểm tra nhanh (--test)
     if "--test" in sys.argv:
-        print("🧪 Đang chạy chế độ kiểm tra (TEST MODE AI ENGINEERING)...")
+        print("🧪 Đang chạy chế độ kiểm tra (TEST MODE AI ENGINEERING & MCP)...")
         sample_trending = [
             {"name": "JuliusBrussee/caveman", "stars": "104,115", "desc": "Token compression & prompt optimizer for LLM coding agents", "url": "https://github.com/JuliusBrussee/caveman"},
             {"name": "koala73/worldmonitor", "stars": "85,771", "desc": "Real-time global intelligence dashboard with AI news aggregation", "url": "https://github.com/koala73/worldmonitor"},
@@ -391,6 +468,11 @@ def main():
             {"name": "headroomlabs-ai/headroom", "stars": "69,665", "desc": "Compress tool outputs, logs, files, and RAG chunks before model context", "url": "https://github.com/headroomlabs-ai/headroom"}
         ]
         sample_tools = """
+        📦 <b>Awesome MCP Servers:</b>
+        - [TomD4vs/prumo](https://github.com/TomD4vs/prumo) - Checks context files a coding agent reads (CLAUDE.md, SKILL.md, .cursor/rules) against git index.
+        - [SLP-DEV1/qwen-dap-mcp](https://github.com/SLP-DEV1/qwen-dap-mcp) - DAP-to-MCP bridge that gives coding agents structured native-debugger evidence.
+
+        📦 <b>Awesome Generative AI:</b>
         - [Cursor Router](https://cursor.com/) - Intelligent model routing system that automatically picks the right model for coding.
         - [NotebookLM Audio](https://notebooklm.google/) - Generates conversational podcasts from your uploaded documents.
         """
@@ -404,9 +486,9 @@ def main():
             },
             {
                 "source": "Hacker News",
-                "topic": "Cursor",
+                "topic": "MCP",
                 "score": 410,
-                "title": "How our startup replaced standard IDEs with Cursor and saved 40% dev time",
+                "title": "Why Model Context Protocol (MCP) is becoming the standard for agentic developer tools",
                 "link": "https://news.ycombinator.com"
             }
         ]
@@ -427,21 +509,9 @@ def main():
     print("📈 Đang lấy Top 5 AI Repos trending trên GitHub...")
     trending_repos = get_github_trending_repos()
 
-    # Quét GitHub Awesome AI
-    latest_sha, _ = get_latest_commit()
-    diff_text = ""
-    last_saved_sha = None
-
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "r") as f:
-            last_saved_sha = f.read().strip()
-
-    if latest_sha and last_saved_sha and latest_sha != last_saved_sha:
-        print(f"⚡ Phát hiện commit mới trên GitHub ({last_saved_sha[:7]} -> {latest_sha[:7]})")
-        diff_text = get_commit_diff(last_saved_sha, latest_sha)
-    elif latest_sha and not last_saved_sha:
-        with open(STATE_FILE, "w") as f:
-            f.write(latest_sha)
+    # Quét GitHub Awesome AI & Awesome MCP Servers
+    print("⚡ Đang kiểm tra cập nhật mới từ Awesome AI & Awesome MCP Servers...")
+    diff_text, updates_to_save = get_all_tracked_updates()
 
     # Quét Thảo luận Reddit & Hacker News
     print("🔍 Đang quét thảo luận sôi nổi từ Hacker News & Reddit...")
@@ -455,9 +525,14 @@ def main():
 
     # Gửi Telegram
     if send_telegram_message(summary):
-        if latest_sha:
-            with open(STATE_FILE, "w") as f:
-                f.write(latest_sha)
+        # Lưu các SHA mới của các repo được theo dõi
+        for state_file, sha in updates_to_save:
+            try:
+                with open(state_file, "w", encoding="utf-8") as f:
+                    f.write(sha)
+            except Exception as e:
+                print(f"⚠️ Lỗi khi lưu state file {state_file}: {e}")
+
         # Tiến độ ngày học sang ngày tiếp theo
         advance_lesson_day(day_idx)
         print(f"✅ Đã gửi bản tin Ngày #{day_idx} thành công! Ngày mai sẽ học Ngày #{day_idx + 1}.")
