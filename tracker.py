@@ -170,15 +170,33 @@ def get_github_trending_repos():
     return repos
 
 
+# Danh sách chủ đề thảo luận: Ưu tiên hàng đầu và chủ đề thứ cấp
+PRIORITY_TOPICS = ["Grok", "Codex", "Gemini"]
+SECONDARY_TOPICS = ["DeepSeek", "Cursor AI", "Antigravity", "MCP", "Claude"]
+ALL_DISCUSSION_TOPICS = PRIORITY_TOPICS + SECONDARY_TOPICS
+
+
 def get_hacker_news_posts():
-    """Lấy các bài thảo luận nổi bật từ Grok, Claude, Codex, DeepSeek, Cursor, Antigravity"""
+    """Lấy các bài thảo luận nổi bật từ Hacker News, mở rộng tìm kiếm cho Grok, Codex, Gemini"""
     posts = []
-    keywords = ["Grok", "Claude", "Codex", "DeepSeek", "Cursor AI", "Antigravity", "MCP", "Model Context Protocol"]
     headers = {"User-Agent": "DailyAINewsBot/1.0"}
 
-    for kw in keywords:
+    # Từ khóa tìm kiếm tối ưu trên HN Algolia
+    query_map = {
+        "Grok": "Grok OR xAI",
+        "Codex": "Codex OR \"OpenAI Codex\"",
+        "Gemini": "Gemini OR \"Google Gemini\"",
+        "DeepSeek": "DeepSeek",
+        "Cursor AI": "\"Cursor AI\" OR \"Cursor editor\"",
+        "Antigravity": "Antigravity",
+        "MCP": "\"Model Context Protocol\" OR MCP",
+        "Claude": "Claude"
+    }
+
+    for kw in ALL_DISCUSSION_TOPICS:
+        query_term = query_map.get(kw, kw)
         try:
-            url = f"https://hn.algolia.com/api/v1/search?query={kw}&tags=story&hitsPerPage=3"
+            url = f"https://hn.algolia.com/api/v1/search?query={query_term}&tags=story&hitsPerPage=5"
             res = requests.get(url, headers=headers, timeout=10)
             if res.status_code == 200:
                 data = res.json()
@@ -197,19 +215,32 @@ def get_hacker_news_posts():
         except Exception as e:
             print(f"⚠️ Lỗi quét Hacker News cho {kw}: {e}")
 
-    posts.sort(key=lambda x: x["score"], reverse=True)
-    return posts[:3]
+    return posts
 
 
 def get_reddit_posts():
-    """Lấy các bài thảo luận nổi bật từ Reddit về Grok, Claude, Codex, DeepSeek, Cursor, Antigravity, MCP"""
+    """Lấy các bài thảo luận nổi bật từ Reddit về Grok, Codex, Gemini, DeepSeek, Cursor, MCP, Claude"""
     posts = []
-    keywords = ["Grok", "Claude", "Codex", "DeepSeek", "Cursor AI", "Antigravity", "Model Context Protocol"]
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 DailyAIBot/1.0"}
 
-    for kw in keywords:
+    query_map = {
+        "Grok": "Grok",
+        "Codex": "Codex",
+        "Gemini": "Gemini",
+        "DeepSeek": "DeepSeek",
+        "Cursor AI": "Cursor",
+        "Antigravity": "Antigravity",
+        "MCP": "MCP",
+        "Claude": "Claude"
+    }
+
+    # Bổ sung các cộng đồng r/GoogleGeminiAI và r/Singularity để đón đầu tin tức Grok và Gemini
+    subreddits = "LocalLLaMA+ChatGPT+artificial+GoogleGeminiAI+singularity"
+
+    for kw in ALL_DISCUSSION_TOPICS:
+        query_term = query_map.get(kw, kw)
         try:
-            url = f"https://www.reddit.com/r/LocalLLaMA+ChatGPT+artificial/search.json?q={kw}&sort=top&t=week&limit=3"
+            url = f"https://www.reddit.com/r/{subreddits}/search.json?q={query_term}&sort=top&t=week&limit=5"
             res = requests.get(url, headers=headers, timeout=10)
             if res.status_code == 200:
                 data = res.json()
@@ -230,8 +261,65 @@ def get_reddit_posts():
         except Exception as e:
             print(f"⚠️ Lỗi quét Reddit cho {kw}: {e}")
 
-    posts.sort(key=lambda x: x["score"], reverse=True)
-    return posts[:3]
+    return posts
+
+
+def filter_and_prioritize_discussions(posts: list, max_total: int = 4) -> list:
+    """
+    Lọc và ưu tiên bài thảo luận:
+    - ĐẶC BIỆT ƯU TIÊN cho Grok, Codex, Gemini.
+    - Đảm bảo tính đa dạng: Mỗi chủ đề/mô hình TỐI ĐA 1 BÀI (chấm dứt tình trạng Claude độc chiếm cả 3 bài).
+    - Claude chỉ được tối đa 1 bài và chỉ lấy nếu còn chỗ sau khi đã chọn các chủ đề ưu tiên.
+    """
+    if not posts:
+        return []
+
+    # Nhóm bài viết theo topic, sắp xếp theo điểm vote giảm dần trong từng nhóm
+    grouped_by_topic = {}
+    for p in posts:
+        t = p.get("topic")
+        if t not in grouped_by_topic:
+            grouped_by_topic[t] = []
+        grouped_by_topic[t].append(p)
+
+    for t in grouped_by_topic:
+        grouped_by_topic[t].sort(key=lambda x: x["score"], reverse=True)
+
+    selected = []
+    used_topics = set()
+
+    # Bước 1: Ưu tiên chọn 1 bài tốt nhất từ mỗi topic trong PRIORITY_TOPICS (Grok, Codex, Gemini)
+    for topic in PRIORITY_TOPICS:
+        if topic in grouped_by_topic and grouped_by_topic[topic]:
+            best_post = grouped_by_topic[topic][0]
+            selected.append(best_post)
+            used_topics.add(topic)
+
+    # Bước 2: Điền các vị trí còn lại từ các chủ đề khác (DeepSeek, MCP, Cursor, Claude...)
+    remaining_candidates = []
+    for topic, topic_posts in grouped_by_topic.items():
+        if topic not in used_topics and topic_posts:
+            remaining_candidates.append(topic_posts[0])
+
+    # Sắp xếp các topic còn lại theo score giảm dần
+    remaining_candidates.sort(key=lambda x: x["score"], reverse=True)
+
+    for p in remaining_candidates:
+        if len(selected) >= max_total:
+            break
+        selected.append(p)
+        used_topics.add(p["topic"])
+
+    # Bước 3: Nếu vẫn chưa đủ max_total và còn bài từ PRIORITY_TOPICS (ví dụ có 2 tin nóng về Grok/Gemini)
+    if len(selected) < max_total:
+        for topic in PRIORITY_TOPICS:
+            if topic in grouped_by_topic and len(grouped_by_topic[topic]) > 1:
+                selected.append(grouped_by_topic[topic][1])
+                if len(selected) >= max_total:
+                    break
+
+    return selected
+
 
 
 def summarize_with_gemini(lesson_info: dict, trending_repos: list, awesome_diff: str, discussions: list) -> str:
@@ -315,7 +403,13 @@ Gợi ý nội dung: {lesson_info['desc']}
 ━━━━━━━━━━━━━━━━━━━━
 
 🔥 <b>4. THẢO LUẬN NỔI BẬT (Reddit & HN)</b>
-💬 <b>[Tên chủ đề thảo luận]</b>
+[Trình bày từ 2 đến 3 bài thảo luận theo dữ liệu cung cấp.
+QUY TẮC BẮT BUỘC CHO PHẦN NÀY:
+- ĐẶC BIỆT ƯU TIÊN chọn các thảo luận về: Grok (xAI), Codex (OpenAI), và Gemini (Google).
+- TUYỆT ĐỐI KHÔNG để một mô hình độc chiếm (Ví dụ: KHÔNG chọn 2 hoặc 3 bài cùng về Claude).
+- Mỗi nền tảng/model chỉ xuất hiện TỐI ĐA 1 BÀI để đảm bảo tính đa dạng (Nếu có bài về Claude, tối đa chỉ chọn 1 bài).]
+
+💬 <b>[Tên chủ đề thảo luận - ghi rõ tên công nghệ/model: ví dụ Grok 3, OpenAI Codex, Google Gemini, v.v.]</b>
 <blockquote>[1-2 câu tóm tắt nội dung thảo luận].
 👉 <a href="[link_goc]">Xem thảo luận</a> ([Số] votes)</blockquote>
 
@@ -479,17 +573,24 @@ def main():
         sample_discussions = [
             {
                 "source": "Reddit (r/LocalLLaMA)",
-                "topic": "DeepSeek",
-                "score": 520,
-                "title": "Hacker's guide to running DeepSeek R1 locally on consumer GPUs with quantized GGUF",
+                "topic": "Grok",
+                "score": 850,
+                "title": "xAI releases Grok 3 reasoning benchmark and expanded API context window",
                 "link": "https://reddit.com/r/LocalLLaMA"
             },
             {
                 "source": "Hacker News",
-                "topic": "MCP",
-                "score": 410,
-                "title": "Why Model Context Protocol (MCP) is becoming the standard for agentic developer tools",
+                "topic": "Codex",
+                "score": 620,
+                "title": "OpenAI Codex CLI update: Real-time code editing and workspace context integration",
                 "link": "https://news.ycombinator.com"
+            },
+            {
+                "source": "Reddit (r/GoogleGeminiAI)",
+                "topic": "Gemini",
+                "score": 540,
+                "title": "Google announces Gemini 2.5 Flash updates with enhanced speed and low-latency multimodal API",
+                "link": "https://reddit.com/r/GoogleGeminiAI"
             }
         ]
 
@@ -502,6 +603,9 @@ def main():
         print("2. Đang gửi vào Telegram của bạn...")
         if send_telegram_message(summary):
             print(f"\n🎉 THÀNH CÔNG! Bản tin Ngày #{day_idx} ưu tiên kiến thức AI đã gửi về Telegram!")
+        else:
+            print("❌ Gửi Telegram thất bại!")
+            sys.exit(1)
         return
 
     # Chế độ chạy thật tự động
@@ -514,10 +618,11 @@ def main():
     diff_text, updates_to_save = get_all_tracked_updates()
 
     # Quét Thảo luận Reddit & Hacker News
-    print("🔍 Đang quét thảo luận sôi nổi từ Hacker News & Reddit...")
+    print("🔍 Đang quét thảo luận sôi nổi từ Hacker News & Reddit (ưu tiên Grok, Codex, Gemini)...")
     hn_posts = get_hacker_news_posts()
     reddit_posts = get_reddit_posts()
-    all_discussions = hn_posts + reddit_posts
+    all_raw_discussions = hn_posts + reddit_posts
+    all_discussions = filter_and_prioritize_discussions(all_raw_discussions, max_total=4)
 
     # Tổng hợp bằng Gemini
     print(f"🤖 Đang gọi Gemini tổng hợp bài học Ngày #{day_idx} và bản tin 4 phần...")
@@ -536,6 +641,9 @@ def main():
         # Tiến độ ngày học sang ngày tiếp theo
         advance_lesson_day(day_idx)
         print(f"✅ Đã gửi bản tin Ngày #{day_idx} thành công! Ngày mai sẽ học Ngày #{day_idx + 1}.")
+    else:
+        print("❌ Gửi Telegram thất bại!")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
